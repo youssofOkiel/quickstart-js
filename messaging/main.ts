@@ -1,5 +1,11 @@
 import { initializeApp } from 'firebase/app';
-import { MessagePayload, deleteToken, getMessaging, getToken, onMessage } from 'firebase/messaging';
+import {
+  MessagePayload,
+  deleteToken,
+  getMessaging,
+  getToken,
+  onMessage,
+} from 'firebase/messaging';
 import { firebaseConfig, vapidKey } from './config';
 
 initializeApp(firebaseConfig);
@@ -25,24 +31,27 @@ function resetUI() {
   showToken('loading...');
   // Get registration token. Initially this makes a network call, once retrieved
   // subsequent calls to getToken will return from cache.
-  getToken(messaging, { vapidKey }).then((currentToken) => {
-    if (currentToken) {
-      sendTokenToServer(currentToken);
-      updateUIForPushEnabled(currentToken);
-    } else {
-      // Show permission request.
-      console.log('No registration token available. Request permission to generate one.');
-      // Show permission UI.
-      updateUIForPushPermissionRequired();
+  getToken(messaging, { vapidKey })
+    .then((currentToken) => {
+      if (currentToken) {
+        sendTokenToServer(currentToken);
+        updateUIForPushEnabled(currentToken);
+      } else {
+        // Show permission request.
+        console.log(
+          'No registration token available. Request permission to generate one.',
+        );
+        // Show permission UI.
+        updateUIForPushPermissionRequired();
+        setTokenSentToServer(false);
+      }
+    })
+    .catch((err) => {
+      console.log('An error occurred while retrieving token. ', err);
+      showToken('Error retrieving registration token.');
       setTokenSentToServer(false);
-    }
-  }).catch((err) => {
-    console.log('An error occurred while retrieving token. ', err);
-    showToken('Error retrieving registration token.');
-    setTokenSentToServer(false);
-  });
+    });
 }
-
 
 function showToken(currentToken: string) {
   // Show token in console and UI.
@@ -57,9 +66,28 @@ function sendTokenToServer(currentToken: string) {
   if (!isTokenSentToServer()) {
     console.log('Sending token to server...', currentToken);
     // TODO(developer): Send the current token to your server.
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'http://fit-circle.test/api/device-token', true);
+    xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4 && xhr.status === 200) {
+        console.log('Token sent to server successfully');
+      } else if (xhr.readyState === 4) {
+        console.log('Error sending token to server');
+      }
+    };
+    xhr.send(JSON.stringify({ 
+      device_token: currentToken,
+      platform: 'web',
+      language: "ar"
+     }));
+
     setTokenSentToServer(true);
   } else {
-    console.log('Token already sent to server so won\'t send it again unless it changes');
+    console.log(
+      "Token already sent to server so won't send it again unless it changes",
+    );
   }
 }
 
@@ -97,19 +125,23 @@ function requestPermission() {
 
 function deleteTokenFromFirebase() {
   // Delete registration token.
-  getToken(messaging).then((currentToken) => {
-    deleteToken(messaging).then(() => {
-      console.log('Token deleted.', currentToken);
-      setTokenSentToServer(false);
-      // Once token is deleted update UI.
-      resetUI();
-    }).catch((err) => {
-      console.log('Unable to delete token. ', err);
+  getToken(messaging)
+    .then((currentToken) => {
+      deleteToken(messaging)
+        .then(() => {
+          console.log('Token deleted.', currentToken);
+          setTokenSentToServer(false);
+          // Once token is deleted update UI.
+          resetUI();
+        })
+        .catch((err) => {
+          console.log('Unable to delete token. ', err);
+        });
+    })
+    .catch((err) => {
+      console.log('Error retrieving registration token. ', err);
+      showToken('Error retrieving registration token.');
     });
-  }).catch((err) => {
-    console.log('Error retrieving registration token. ', err);
-    showToken('Error retrieving registration token.');
-  });
 }
 
 // Add a message to the messages element.
@@ -143,7 +175,11 @@ function updateUIForPushPermissionRequired() {
   showHideDiv(permissionDivId, true);
 }
 
-document.getElementById('request-permission-button')!.addEventListener('click', requestPermission);
-document.getElementById('delete-token-button')!.addEventListener('click', deleteTokenFromFirebase);
+document
+  .getElementById('request-permission-button')!
+  .addEventListener('click', requestPermission);
+document
+  .getElementById('delete-token-button')!
+  .addEventListener('click', deleteTokenFromFirebase);
 
 resetUI();
